@@ -1,16 +1,13 @@
 /**
- * ESP8266 12F + CS2105GO-S10 Smoke Sersor with Vera integration. 
- * To be powered by MP2307-based step down converter.
- *
- *Create vera device :
- *curl "http://VERAIP:3480/data_request?id=action&serviceId=urn:micasaverde-com:serviceId:HomeAutomationGateway1&action=CreateDevice&deviceType=urn:schemas-micasaverde-com:device:SmokeSensor:1&internalID=&Description=WiFiSmokeSensor&UpnpDevFilename=D_SmokeSensor1.xml&UpnpImplFilename=&MacAddress=&RoomNum=0&Reload=1&IpAddress="
- *curl "http://VERAIP:3480/data_request?id=variableset&serviceId=urn:micasaverde-com:serviceId:SecuritySensor1&Variable=AutoUntrip&Value=300&DeviceNum=DEVICEID
+ * ESP8266 12F + CS2105GO-S10 Smoke Sersor with MQTT integration.
+ * To be powered by MP2307-based step down converter (CS2105GO-S10 link pin to MP2307 enable pin).
  **/
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
+#include <PubSubClient.h>
 
 //Atomic OTA Updates
 #define ATOMIC_FS_UPDATE
@@ -24,8 +21,8 @@ String ProgramVersion  = "0.1";
 
 WiFiClient client;
 HTTPClient http;
-
-long glb_rssi=0;
+PubSubClient mqttClient(client);
+char rssi_str[6];
 
 void gotoDeepSleep(int SleepDelay){
   Serial.print("Sleeping " + String(SleepDelay) + " seconds\n");
@@ -132,37 +129,22 @@ return wifiStatus;
 }
 
 int getRSSI(){
-  glb_rssi=WiFi.RSSI();
+  int32_t rssi=WiFi.RSSI();
 
-  Serial.println("WiFi RSSI: " + String(glb_rssi) + "dBm");
+  itoa(rssi, rssi_str, 10); // Convert integer to string
+  Serial.println("WiFi RSSI: " + String(rssi) + "dBm");
   
   return 0; 
 }
 
-int GetHttpURL(String MyURL){
-  Serial.print("[HTTP] begin...\n");
-
-  http.begin(client,String(VeraBaseURL) + MyURL);
-    
-  int httpCode = http.GET();
-
-   if (httpCode > 0) {
-     Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-    
-     if (httpCode == HTTP_CODE_OK) {
-        http.writeToStream(&Serial);
-        }
-  }
-  else {
-    Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-    }
- 
- return httpCode;
-}
-
 void setup() {
+  //Prepare MQTT client id and topics
+  String mqtt_client_id = ESPName + " Smoke Detector";
+  String mqtt_status_topic = "/sensor/" + ESPName + "/smoke-detector/status";
+  String mqtt_rssi_topic = "/sensor/" + ESPName + "/smoke-detector/rssi";
+
   Serial.begin(115200);
-  Serial.print("\n" + String(ESPName) + " started\n");
+  Serial.print("\n" + ESPName + " Smoke Detector started\n");
 
   //Debug WiFi off
   Serial.setDebugOutput(false);
@@ -172,17 +154,20 @@ void setup() {
 
   // Connect WiFi
   connect_wifi();
-  
-  http.setReuse(true);
-  
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:SecuritySensor1&Variable=Tripped&Value=1");
 
-  getRSSI();
+  // Configure MQTT server
+  mqttClient.setServer(mqtt_server, mqtt_port);
 
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:SecuritySensor1&Variable=CurrentRSSI&Value=" + String(glb_rssi));
-  GetHttpURL("data_request?id=variableset&DeviceNum=" + String(VeraDeviceID) + "&serviceId=urn:micasaverde-com:serviceId:SecuritySensor1&Variable=AutoUntrip&Value=300");
+  // Connect to MQTT Broker and publish the "ON" state immediately
+  if (mqttClient.connect(mqtt_client_id.c_str(), mqtt_user, mqtt_pass)) {
+     // Publish as a retained message so Home Assistant registers it even if it missed the exact millisecond
+    mqttClient.publish(mqtt_status_topic.c_str(), "ON", true);
 
-  http.end();
+    getRSSI();
+
+     // Publish as a retained message so Home Assistant registers it even if it missed the exact millisecond
+     mqttClient.publish(mqtt_rssi_topic.c_str(), rssi_str, true);
+  }
 
   //Check for OTA update and update if OTA_TRIGGER_PIN is LOW.
   checkForUpdates();
