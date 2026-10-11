@@ -20,4 +20,5 @@ const char* mqtt_server = "192.168.1.10"; // MQTT Broker IP
 const int mqtt_port     = 1883;
 const char* mqtt_user     = "MQTT_USERNAME"; // User
 const char* mqtt_pass     = "MQTT_PASSWORD"; // Password
+const int mqtt_off     = 15; //Seconds to clear ON state
 // EOF

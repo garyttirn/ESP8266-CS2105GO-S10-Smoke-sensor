@@ -165,13 +165,24 @@ void setup() {
 
     getRSSI();
 
-     // Publish as a retained message so Home Assistant registers it even if it missed the exact millisecond
-     mqttClient.publish(mqtt_rssi_topic.c_str(), rssi_str, true);
+    // Publish as a retained message so Home Assistant registers it even if it missed the exact millisecond
+    mqttClient.publish(mqtt_rssi_topic.c_str(), rssi_str, true);
   }
 
+  Serial.print("\n" + ESPName + " Smoke Detector MQTT publish ON\n");
   //Check for OTA update and update if OTA_TRIGGER_PIN is LOW.
   checkForUpdates();
   
+  unsigned long startTime = millis();
+  while (millis() - startTime < 1000 * mqtt_off) {
+    mqttClient.loop();
+    delay(100);
+  }
+
+  Serial.print("\n" + ESPName + " Smoke Detector MQTT publish OFF\n");
+  mqttClient.publish(mqtt_status_topic.c_str(), "OFF", true);
+
+  delay(1000);
   gotoDeepSleep(sleepTimeS);
 }
 
