@@ -140,8 +140,8 @@ int getRSSI(){
 void setup() {
   //Prepare MQTT client id and topics
   String mqtt_client_id = ESPName + " Smoke Detector";
-  String mqtt_status_topic = "/sensor/" + ESPName + "/smoke-detector/status";
-  String mqtt_rssi_topic = "/sensor/" + ESPName + "/smoke-detector/rssi";
+  String mqtt_status_topic = "sensor/" + ESPName + "/smoke-detector/status";
+  String mqtt_rssi_topic = "sensor/" + ESPName + "/smoke-detector/rssi";
 
   Serial.begin(115200);
   Serial.print("\n" + ESPName + " Smoke Detector started\n");
